@@ -1,0 +1,44 @@
+name: study_planner
+description: A new Flutter project for university study planning.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  
+  # State management
+  provider: ^6.0.0
+  # Data persistence
+  shared_preferences: ^2.2.0
+  # Networking
+  http: ^1.1.0
+  # Date formatting
+  intl: ^0.19.0
+  # Charts
+  fl_chart: ^0.66.0
+  flutter_markdown: ^0.6.18+2
+  flutter_local_notifications: ^17.1.0
+  timezone: ^0.9.2
+  # Biometric authentication
+  local_auth: ^2.1.8
+  # WebSocket
+  socket_io_client: ^2.0.3+1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  
+  assets:
+    - assets/images/
+
