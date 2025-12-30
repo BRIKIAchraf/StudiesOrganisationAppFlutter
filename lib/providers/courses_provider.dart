@@ -4,20 +4,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../models/course.dart';
 import '../models/study_session.dart';
+import '../models/document.dart';
+import '../models/enrollment.dart';
 import '../config/api_config.dart';
 import '../services/notification_service.dart';
 
 class CoursesProvider with ChangeNotifier {
-  List<Course> _courses = [];
+  List<Course> _myCourses = []; // Enrolled or Created
+  List<Course> _availableCourses = []; // For discovery
+  List<Document> _documents = []; // Current course documents
+  
   String? _authToken;
-
   final String _baseUrl = ApiConfig.baseUrl;
 
   void updateToken(String? token) {
     bool tokenChanged = _authToken != token;
     _authToken = token;
     if (tokenChanged && token != null) {
-      loadData();
+      loadMyCourses();
     }
   }
 
@@ -26,80 +30,172 @@ class CoursesProvider with ChangeNotifier {
     if (_authToken != null) 'Authorization': 'Bearer $_authToken',
   };
 
-  List<Course> get courses => _courses;
+  List<Course> get courses => _myCourses;
+  List<Course> get availableCourses => _availableCourses;
+  List<Document> get currentDocuments => _documents;
 
   List<Course> get upcomingExams {
-    final sorted = List<Course>.from(_courses);
+    final sorted = List<Course>.from(_myCourses);
     sorted.sort((a, b) => a.examDate.compareTo(b.examDate));
     return sorted.where((c) => c.examDate.isAfter(DateTime.now().subtract(const Duration(days: 1)))).toList();
   }
 
-  Future<void> updateCourse(
-    String id, {
-    String? name,
-    String? professor,
-    DateTime? examDate,
-    String? status,
-    int? grade,
-    String? notes,
-  }) async {
+  // --- Load My Courses (Enrolled / Created) ---
+  Future<void> loadMyCourses() async {
+    if (_authToken == null) return;
     try {
-      final response = await http.put(
-        Uri.parse('$_baseUrl/courses/$id'),
-        headers: _headers,
-        body: json.encode({
-          if (name != null) 'name': name,
-          if (professor != null) 'professor': professor,
-          if (examDate != null) 'examDate': examDate.toIso8601String(),
-          if (status != null) 'status': status,
-          if (grade != null) 'grade': grade,
-          if (notes != null) 'notes': notes,
-        }),
-      );
-
+      final response = await http.get(Uri.parse('$_baseUrl/courses'), headers: _headers);
       if (response.statusCode == 200) {
-        final index = _courses.indexWhere((c) => c.id == id);
-        if (index >= 0) {
-          final old = _courses[index];
-          _courses[index] = Course(
-            id: old.id,
-            name: name ?? old.name,
-            professor: professor ?? old.professor,
-            examDate: examDate ?? old.examDate,
-            status: status ?? old.status,
-            grade: grade ?? old.grade,
-            sessions: old.sessions,
-            notes: notes ?? old.notes,
-          );
-          notifyListeners();
-        }
+        final List<dynamic> decoded = json.decode(response.body);
+        _myCourses = decoded.map((item) => Course.fromJson(item)).toList();
+        notifyListeners();
       }
     } catch (error) {
-      print('Error updating course: $error');
+      print('Network error loading my courses: $error');
     }
   }
 
-  // Refactor updateCourseStatus to use updateCourse
-  Future<void> updateCourseStatus(String id, String status, {int? grade}) async {
-    await updateCourse(id, status: status, grade: grade);
+  // --- Discovery (Students) ---
+  Future<void> loadAvailableCourses() async {
+    if (_authToken == null) return;
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/courses/all'), headers: _headers);
+      if (response.statusCode == 200) {
+        final List<dynamic> decoded = json.decode(response.body);
+        _availableCourses = decoded.map((item) => Course.fromJson(item)).toList();
+        
+        // Filter out already enrolled courses from available list logic if needed
+        // Assuming backend sends all, we can filter locally or just show status
+        notifyListeners();
+      }
+    } catch (error) {
+      print('Error loading available courses: $error');
+    }
   }
 
-  double get averageGrade {
-    final gradedCourses = _courses.where((c) => c.grade != null).toList();
-    if (gradedCourses.isEmpty) return 0.0;
-    final sum = gradedCourses.fold(0, (prev, c) => prev + c.grade!);
-    return sum / gradedCourses.length;
+  // --- Enroll (Student) ---
+  Future<void> enrollInCourse(String courseId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/courses/$courseId/enroll'),
+        headers: _headers,
+      );
+      if (response.statusCode == 201) {
+        // Refresh to show pending status
+        loadMyCourses();
+      }
+    } catch (e) {
+      print('Enrollment error: $e');
+    }
   }
 
-  int get completedCoursesCount {
-    return _courses.where((c) => c.status == 'completed').length;
+  // --- Approve (Professor) ---
+  Future<void> approveStudent(String courseId, String enrollmentId, String status) async {
+    try {
+      await http.post(
+        Uri.parse('$_baseUrl/courses/$courseId/enrollments/$enrollmentId/approve'),
+        headers: _headers,
+        body: json.encode({'status': status}),
+      );
+      // Logic to refresh or update local state could be added
+    } catch (e) {
+      print('Approval error: $e');
+    }
   }
 
+  // --- Professor Create Course ---
+  Future<void> addCourse(String title, String description, DateTime date) async {
+    try {
+       final response = await http.post(
+        Uri.parse('$_baseUrl/courses'),
+        headers: _headers,
+        body: json.encode({
+          'title': title,
+          'description': description,
+          'examDate': date.toIso8601String()
+        }),
+      );
+      if (response.statusCode == 201) {
+        loadMyCourses();
+      }
+    } catch (e) {
+      print('Error creating course: $e');
+    }
+  }
+
+  // --- Enrollment: Management ---
+  Future<List<Enrollment>> fetchEnrollments(String courseId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/courses/$courseId/enrollments'),
+        headers: _headers,
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => Enrollment.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Error fetching enrollments: $e');
+    }
+    return [];
+  }
+
+  // --- Documents ---
+  Future<void> loadDocuments(String courseId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/courses/$courseId/documents'), 
+        headers: _headers
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        _documents = data.map((j) => Document.fromJson(j)).toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error loading documents: $e');
+    }
+  }
+
+  Future<void> uploadDocument(String courseId, String title, String filePath) async {
+    try {
+      await http.post(
+        Uri.parse('$_baseUrl/courses/$courseId/documents'),
+        headers: _headers,
+        body: json.encode({'title': title, 'filePath': filePath}),
+      );
+      loadDocuments(courseId);
+    } catch (e) {
+      print('Error uploading doc: $e');
+    }
+  }
+
+  // --- Sessions (Legacy / Student Tracking) ---
+  Future<void> addSession(String courseId, StudySession session) async {
+    // Only if Student
+    try {
+      await http.post(
+        Uri.parse('$_baseUrl/courses/$courseId/sessions'),
+        headers: _headers,
+        body: json.encode(session.toJson()),
+      );
+      // Optimistic update
+      final index = _myCourses.indexWhere((c) => c.id == courseId);
+      if (index >= 0) {
+         _myCourses[index].sessions.add(session);
+         notifyListeners();
+      }
+    } catch (e) {
+      print('Session add error: $e');
+    }
+  }
+  
+  // Analytics Getters needed for Home Screen
   int get studyTimeToday {
     int total = 0;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    for (var course in _courses) {
+    for (var course in _myCourses) {
       for (var session in course.sessions) {
         if (session.date.isAfter(today)) {
           total += session.durationMinutes;
@@ -108,238 +204,63 @@ class CoursesProvider with ChangeNotifier {
     }
     return total;
   }
+  
+  Course? get recommendedCourse {
+    if (_myCourses.isEmpty) return null;
+    // Simple logic: closest exam
+    final active = _myCourses.where((c) => c.examDate.isAfter(DateTime.now())).toList();
+    active.sort((a, b) => a.examDate.compareTo(b.examDate));
+    return active.isNotEmpty ? active.first : null;
+  }
+  
+  List<String> get achievementBadges {
+     // Mock logic
+     return []; 
+  }
+
+  // --- Analytics for Home Screen ---
+  int get completedCoursesCount => _myCourses.where((c) => c.examDate.isBefore(DateTime.now())).length;
+  
+  double get averageGrade {
+    if (_myCourses.isEmpty) return 0.0;
+    int total = 0;
+    int count = 0;
+    for (var c in _myCourses) {
+      if (c.grade != null) {
+        total += c.grade!;
+        count++;
+      }
+    }
+    return count == 0 ? 0.0 : total / count;
+  }
 
   Map<int, int> get weeklyStudyData {
-    Map<int, int> data = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0};
+    final data = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0};
     final now = DateTime.now();
-    final sevenDaysAgo = now.subtract(const Duration(days: 7));
-    
-    for (var course in _courses) {
-      for (var session in course.sessions) {
-        if (session.date.isAfter(sevenDaysAgo)) {
-          data[session.date.weekday] = (data[session.date.weekday] ?? 0) + session.durationMinutes;
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final endOfWeek = startOfWeek.add(const Duration(days: 7));
+
+    for (var c in _myCourses) {
+      for (var s in c.sessions) {
+        if (s.date.isAfter(startOfWeek) && s.date.isBefore(endOfWeek)) {
+          data[s.date.weekday] = (data[s.date.weekday] ?? 0) + s.durationMinutes;
         }
       }
     }
     return data;
   }
 
-  Future<void> _saveData() async {
-    // Legacy method, not needed with backend
-  }
-
   Future<void> loadData() async {
-    if (_authToken == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    
-    // Load from cache first for immediate UI responsiveness (Offline Mode)
-    final cachedData = prefs.getString('cached_courses');
-    if (cachedData != null) {
-      final List<dynamic> decoded = json.decode(cachedData);
-      _courses = decoded.map((item) => Course.fromJson(item)).toList();
-      notifyListeners();
-    }
-
-    try {
-      final response = await http.get(Uri.parse('$_baseUrl/courses'), headers: _headers);
-      if (response.statusCode == 200) {
-        final List<dynamic> decoded = json.decode(response.body);
-        _courses = decoded.map((item) => Course.fromJson(item)).toList();
-        
-        // Save to cache
-        await prefs.setString('cached_courses', response.body);
-        notifyListeners();
-      }
-    } catch (error) {
-      print('Network error, using cached data: $error');
-    }
-  }
-
-  // Placeholder for future cloud sync (Firebase/Websockets)
-  Future<void> syncWithCloud() async {
-    print('Ready for cloud sync engine integration...');
-    // In future: push local changes to Firebase
-  }
-
-  Future<void> addCourse(String name, String professor, DateTime date) async {
-    final newCourse = Course(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      professor: professor,
-      examDate: date,
-    );
-
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/courses'),
-        headers: _headers,
-        body: json.encode(newCourse.toJson()),
-      );
-
-      if (response.statusCode == 201) {
-        _courses.add(newCourse);
-        notifyListeners();
-        
-        // Schedule exam alerts
-        try {
-          final notificationService = NotificationService();
-          final notificationId = newCourse.id.hashCode;
-          await notificationService.scheduleExamAlert(name, date, notificationId);
-        } catch (e) {
-          print('Notification scheduling error: $e');
-        }
-      }
-    } catch (error) {
-      print('Error adding course: $error');
-    }
-  }
-
-  Future<void> addSession(String courseId, StudySession session) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/courses/$courseId/sessions'),
-        headers: _headers,
-        body: json.encode(session.toJson()),
-      );
-
-      if (response.statusCode == 201) {
-        final index = _courses.indexWhere((c) => c.id == courseId);
-        if (index >= 0) {
-          final old = _courses[index];
-          final updatedSessions = List<StudySession>.from(old.sessions)..add(session);
-          _courses[index] = Course(
-            id: old.id,
-            name: old.name,
-            professor: old.professor,
-            examDate: old.examDate,
-            sessions: updatedSessions,
-            status: old.status,
-            grade: old.grade,
-            notes: old.notes,
-          );
-          notifyListeners();
-          // Note: In a full app, you'd also refresh AuthProvider points/streaks here.
-        }
-      }
-    } catch (error) {
-      print('Error adding session: $error');
-    }
-  }
-
-  Course? get recommendedCourse {
-    if (_courses.isEmpty) return null;
-    final active = _courses.where((c) => c.status == 'active').toList();
-    if (active.isEmpty) return null;
-
-    active.sort((a, b) {
-      final aDays = a.examDate.difference(DateTime.now()).inDays;
-      final bDays = b.examDate.difference(DateTime.now()).inDays;
-      final aMinutes = a.sessions.fold(0, (sum, s) => sum + s.durationMinutes);
-      final bMinutes = b.sessions.fold(0, (sum, s) => sum + s.durationMinutes);
-      
-      // score = days - (hours/2) -> lower is better
-      final aScore = aDays - (aMinutes / 120);
-      final bScore = bDays - (bMinutes / 120);
-      return aScore.compareTo(bScore);
-    });
-    return active.first;
-  }
-
-  List<String> get achievementBadges {
-    List<String> badges = [];
-    final totalMin = _courses.fold(0, (s, c) => s + c.sessions.fold(0, (ss, ses) => ss + ses.durationMinutes));
-    if (completedCoursesCount >= 1) badges.add('🎓 First Blood');
-    if (totalMin >= 300) badges.add('🔥 Deep Worker');
-    if (completedCoursesCount >= 5) badges.add('🏆 Academic Legend');
-    return badges;
-  }
-
-  Future<void> updateSession(String courseId, String sessionId, {int? durationMinutes, String? notes, String? type}) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$_baseUrl/courses/$courseId/sessions/$sessionId'),
-        headers: _headers,
-        body: json.encode({
-          if (durationMinutes != null) 'durationMinutes': durationMinutes,
-          if (notes != null) 'notes': notes,
-          if (type != null) 'type': type,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final courseIndex = _courses.indexWhere((c) => c.id == courseId);
-        if (courseIndex >= 0) {
-          final oldCourse = _courses[courseIndex];
-          final updatedSessions = oldCourse.sessions.map((s) {
-            if (s.id == sessionId) {
-              return StudySession(
-                id: s.id,
-                date: s.date,
-                durationMinutes: durationMinutes ?? s.durationMinutes,
-                notes: notes ?? s.notes,
-                type: type ?? s.type,
-              );
-            }
-            return s;
-          }).toList();
-
-          _courses[courseIndex] = Course(
-            id: oldCourse.id,
-            name: oldCourse.name,
-            professor: oldCourse.professor,
-            examDate: oldCourse.examDate,
-            sessions: updatedSessions,
-            status: oldCourse.status,
-            grade: oldCourse.grade,
-            notes: oldCourse.notes,
-          );
-          notifyListeners();
-        }
-      }
-    } catch (error) {
-      print('Error updating session: $error');
-    }
+    await loadMyCourses();
+    await loadAvailableCourses();
   }
 
   Future<void> removeSession(String courseId, String sessionId) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('$_baseUrl/courses/$courseId/sessions/$sessionId'),
-        headers: _headers,
-      );
-      if (response.statusCode == 200) {
-        final courseIndex = _courses.indexWhere((c) => c.id == courseId);
-        if (courseIndex >= 0) {
-          final oldCourse = _courses[courseIndex];
-          final createNewList = oldCourse.sessions.where((s) => s.id != sessionId).toList();
-          
-          _courses[courseIndex] = Course(
-            id: oldCourse.id,
-            name: oldCourse.name,
-            professor: oldCourse.professor,
-            examDate: oldCourse.examDate,
-            sessions: createNewList,
-            status: oldCourse.status,
-            grade: oldCourse.grade,
-            notes: oldCourse.notes,
-          );
-          notifyListeners();
-        }
-      }
-    } catch (error) {
-      print('Error deleting session: $error');
-    }
-  }
-
-  Future<void> deleteCourse(String id) async {
-    try {
-      final response = await http.delete(Uri.parse('$_baseUrl/courses/$id'), headers: _headers);
-      if (response.statusCode == 200) {
-        _courses.removeWhere((course) => course.id == id);
+      // Local removal
+      final index = _myCourses.indexWhere((c) => c.id == courseId);
+      if (index >= 0) {
+        _myCourses[index].sessions.removeWhere((s) => s.id == sessionId);
         notifyListeners();
       }
-    } catch (error) {
-      print('Error deleting course: $error');
-    }
   }
 }

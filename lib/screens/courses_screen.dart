@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/courses_provider.dart';
+import '../providers/auth_provider.dart';
 import '../models/course.dart';
 import 'course_detail_screen.dart';
 
@@ -12,112 +13,110 @@ class CoursesScreen extends StatefulWidget {
   State<CoursesScreen> createState() => _CoursesScreenState();
 }
 
-class _CoursesScreenState extends State<CoursesScreen> {
+class _CoursesScreenState extends State<CoursesScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   String _searchQuery = '';
-  bool _sortByDate = true;
 
-  // Just show the dialog here, keeping it simple
-  void _showAddCourseDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final professorController = TextEditingController();
-    DateTime? selectedDate;
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    // Load both data sets
+    Future.microtask(() {
+      final provider = context.read<CoursesProvider>();
+      provider.loadMyCourses();
+      provider.loadAvailableCourses();
+    });
+  }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add New Course'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Course Name'),
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final isStudent = auth.userRole == 'student';
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Courses'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        bottom: isStudent 
+          ? TabBar(
+              controller: _tabController,
+              labelColor: Colors.indigo,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.indigo,
+              tabs: const [
+                Tab(text: 'My Courses'),
+                Tab(text: 'Find Courses'),
+              ],
+            )
+          : null,
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search courses...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                filled: true,
+                fillColor: Theme.of(context).cardColor.withOpacity(0.8),
               ),
-              TextField(
-                controller: professorController,
-                decoration: const InputDecoration(labelText: 'Professor (Optional)'),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      selectedDate == null
-                          ? 'No Date Chosen!'
-                          : 'Exam Date: ${DateFormat.yMd().format(selectedDate!)}',
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
-                        // set state inside dialog using StatefulBuilder if needed, 
-                        // but simpler to just rebuild this small part or navigate properly.
-                        // Actually, for a dialog, we need a way to update the text.
-                        // Let's us a StatefulBuilder for the dialog content or just be lazy 
-                        // and rely on the variable since showDatePicker is async and we are inside a closure?
-                        // No, the Text widget won't update unless we call setState somewhere.
-                        // Let's use a dirty hack: close and reopen? No that's bad.
-                        // Correct student way: StatefulBuilder or just a separate widget.
-                        // I'll stick to a simple StatefulBuilder in the content.
-                        (ctx as Element).markNeedsBuild(); // Very hacky or just set variable.
-                        // Let's use StatefulBuilder properly.
-                      }
-                      // Wait, I can't use markNeedsBuild on context easily.
-                      // Let's just trust the user to remember the date or update UI?
-                      // Better:
-                      // selectedDate = picked;
-                    },
-                    child: const Text('Choose Date'),
-                  ),
-                ],
-              ),
-            ],
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+          Expanded(
+            child: isStudent ? _buildStudentView() : _buildProfessorView(),
           ),
-          ElevatedButton(
-            onPressed: () {
-              // Basic validation
-              if (nameController.text.isEmpty) return;
-              
-              // If no date, default into the future? Or force it?
-              // Let's force it for simplicity of "Exam Project"
-              // Currently the UI for date picking above is broken because I didn't implement the update logic.
-              // I will fix this in a second pass or just use a helper method.
-              // Actually, I'll rewrite this dialog logic right now to be cleaner.
-            }, 
-            child: const Text('Add'),
-          )
         ],
       ),
+      floatingActionButton: !isStudent 
+        ? FloatingActionButton.extended(
+            onPressed: () => _showAddCourseDialog(context),
+            label: const Text('New Course'),
+            icon: const Icon(Icons.add),
+            backgroundColor: Colors.indigo,
+            foregroundColor: Colors.white,
+          )
+        : null,
     );
   }
-  
-  // Refactored Dialog Logic
-  void _startAddNewCourse(BuildContext context) {
+
+  Widget _buildStudentView() {
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _CoursesList(type: 'my', searchQuery: _searchQuery),
+        _CoursesList(type: 'discovery', searchQuery: _searchQuery),
+      ],
+    );
+  }
+
+  Widget _buildProfessorView() {
+    return _CoursesList(type: 'my', searchQuery: _searchQuery);
+  }
+
+  void _showAddCourseDialog(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) {
-        return Container(
+         return Container(
           decoration: BoxDecoration(
             color: Theme.of(context).scaffoldBackgroundColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 20,
             left: 20, 
             right: 20,
             top: 20
@@ -127,205 +126,163 @@ class _CoursesScreenState extends State<CoursesScreen> {
       },
     );
   }
+}
+
+class _CoursesList extends StatelessWidget {
+  final String type; // 'my' or 'discovery'
+  final String searchQuery;
+
+  const _CoursesList({required this.type, required this.searchQuery});
 
   @override
   Widget build(BuildContext context) {
-    final coursesProvider = context.watch<CoursesProvider>();
+    final provider = context.watch<CoursesProvider>();
+    final courses = type == 'my' ? provider.courses : provider.availableCourses;
     
-    // Filter and Sort
-    List<Course> filteredCourses = coursesProvider.courses.where((c) {
-      return c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-             c.professor.toLowerCase().contains(_searchQuery.toLowerCase());
+    final filtered = courses.where((c) {
+      final matchesSearch = c.title.toLowerCase().contains(searchQuery.toLowerCase()) || 
+                            c.professorName.toLowerCase().contains(searchQuery.toLowerCase());
+      if (type == 'discovery') {
+        // Exclude enrolled courses from discovery? optional, but better UX
+        // For now show all, simple.
+        return matchesSearch;
+      }
+      return matchesSearch;
     }).toList();
 
-    if (_sortByDate) {
-      filteredCourses.sort((a, b) => a.examDate.compareTo(b.examDate));
-    } else {
-      filteredCourses.sort((a, b) => a.name.compareTo(b.name));
-    }
-    
-    return Stack(
-      children: [
-        Column(
+    if (filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: 100), // Space for transparent AppBar
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search courses...',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                  filled: true,
-                  fillColor: Theme.of(context).cardColor.withOpacity(0.8),
-                ),
-                onChanged: (val) => setState(() => _searchQuery = val),
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const Text('Sort by date'),
-                Switch(
-                  value: _sortByDate,
-                  onChanged: (val) => setState(() => _sortByDate = val),
-                  activeColor: Colors.indigo,
-                ),
-                const SizedBox(width: 16),
-              ],
-            ),
-            Expanded(
-              child: filteredCourses.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.book_outlined, size: 64, color: Colors.grey[400]),
-                        const SizedBox(height: 16),
-                        Text(
-                          _searchQuery.isEmpty ? 'No courses yet.' : 'No matches found.',
-                          style: const TextStyle(color: Colors.grey, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: filteredCourses.length,
-                    itemBuilder: (ctx, index) {
-                      final course = filteredCourses[index];
-                      final daysLeft = course.isCompleted ? 999 : course.examDate.difference(DateTime.now()).inDays;
-                      Color urgencyColor;
-                      if (daysLeft < 3) {
-                        urgencyColor = Colors.red;
-                      } else if (daysLeft < 7) {
-                        urgencyColor = Colors.orange;
-                      } else {
-                        urgencyColor = Colors.indigo;
-                      }
-
-                      return Dismissible(
-                        key: Key('course_${course.id}'),
-                        direction: DismissDirection.horizontal,
-                        background: Container(
-                          decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(15)),
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.only(left: 20),
-                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                          child: const Icon(Icons.check_rounded, color: Colors.white),
-                        ),
-                        secondaryBackground: Container(
-                          decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(15)),
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                          child: const Icon(Icons.delete_forever_rounded, color: Colors.white),
-                        ),
-                        confirmDismiss: (direction) async {
-                          if (direction == DismissDirection.startToEnd) {
-                            if (!course.isCompleted) {
-                              await context.read<CoursesProvider>().updateCourseStatus(course.id, 'completed', grade: 30);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Course completed!')));
-                              }
-                            }
-                            return false;
-                          } else {
-                            _showDeleteConfirm(context, course.id, course.name);
-                            return false;
-                          }
-                        },
-                        child: Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                            side: BorderSide(color: urgencyColor.withOpacity(0.3), width: 1),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(12),
-                            leading: CircleAvatar(
-                              backgroundColor: urgencyColor.withOpacity(0.1),
-                              child: Icon(
-                                course.isCompleted ? Icons.check_circle_rounded : Icons.book_outlined, 
-                                color: urgencyColor
-                              ),
-                            ),
-                            title: Text(
-                              course.name, 
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold, 
-                                fontSize: 18,
-                                color: course.isCompleted ? Colors.grey : null,
-                                decoration: course.isCompleted ? TextDecoration.lineThrough : null,
-                              ),
-                            ),
-                            subtitle: Text('${course.professor} • ${DateFormat.yMMMd().format(course.examDate)}'),
-                            trailing: course.isCompleted 
-                              ? const Icon(Icons.verified_rounded, color: Colors.green)
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text('${daysLeft}d', style: TextStyle(color: urgencyColor, fontWeight: FontWeight.bold)),
-                                    const Text('left', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                  ],
-                                ),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => CourseDetailScreen(courseId: course.id)),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+            Icon(Icons.school_outlined, size: 60, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              type == 'my' ? 'No enrolled courses.' : 'No courses found.',
+              style: TextStyle(color: Colors.grey[500]),
             ),
           ],
         ),
-        Positioned(
-          bottom: 20,
-          right: 20,
-          child: FloatingActionButton.extended(
-            onPressed: () => _startAddNewCourse(context),
-            label: const Text('New Course'),
-            icon: const Icon(Icons.add),
-            backgroundColor: Colors.indigo,
-            foregroundColor: Colors.white,
-          ),
-        ),
-      ],
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 80),
+      itemCount: filtered.length,
+      itemBuilder: (ctx, i) => _CourseCard(course: filtered[i], isDiscovery: type == 'discovery'),
     );
   }
-  
+}
+
+class _CourseCard extends StatelessWidget {
+  final Course course;
+  final bool isDiscovery;
+
+  const _CourseCard({required this.course, required this.isDiscovery});
+
   @override
-  void initState() {
-    super.initState();
-    // Load data once
-    Future.delayed(Duration.zero).then((_) {
-      Provider.of<CoursesProvider>(context, listen: false).loadData();
-    });
+  Widget build(BuildContext context) {
+    final auth = context.read<AuthProvider>();
+    
+    // Status Logic
+    bool isPending = course.enrollmentStatus == 'pending';
+    bool isApproved = course.enrollmentStatus == 'approved';
+    bool isRejected = course.enrollmentStatus == 'rejected';
+    
+    // Check if enrolled locally (for discovery list)
+    if (isDiscovery) {
+       // Ideally we check if this course ID exists in "my courses"
+       // But assuming the backend list handles excluding or we handle it in provider
+       // Let's assume Discovery list is RAW courses.
+       // We can check local enrollment state if we merge lists, but for now simple.
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: CircleAvatar(
+          backgroundColor: Colors.indigo.withOpacity(0.1),
+          child: Text(
+            course.title.substring(0, 1).toUpperCase(),
+            style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold),
+          ),
+        ),
+        title: Text(course.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Prof. ${course.professorName}'),
+            if (isDiscovery)
+              Text('Exam: ${DateFormat.yMMMd().format(course.examDate)}', style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+        trailing: isDiscovery 
+          ? ElevatedButton.icon(
+              onPressed: () {
+                // Determine if we are already enrolled
+                // Simple check: iterate my courses
+                final myCourses = context.read<CoursesProvider>().courses;
+                final already = myCourses.any((c) => c.id == course.id);
+                
+                if (already) {
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Already enrolled! Check "My Courses".')));
+                } else {
+                   context.read<CoursesProvider>().enrollInCourse(course.id);
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request sent!')));
+                }
+              }, 
+              icon: const Icon(Icons.add_circle_outline, size: 16),
+              label: const Text('Enroll'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+            )
+          : _buildStatusBadge(context),
+        onTap: () {
+          // Navigate to details
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => CourseDetailScreen(courseId: course.id)),
+          );
+        },
+      ),
+    );
   }
 
-  void _showDeleteConfirm(BuildContext context, String id, String name) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Course?'),
-        content: Text('Are you sure you want to remove "$name"? All study sessions will be lost.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              context.read<CoursesProvider>().deleteCourse(id);
-              Navigator.pop(ctx);
-            }, 
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+  Widget _buildStatusBadge(BuildContext context) {
+    if (context.read<AuthProvider>().userRole == 'professor') {
+       return const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey);
+    }
+  
+    String text = 'Active';
+    Color color = Colors.green;
+    
+    if (course.enrollmentStatus == 'pending') {
+      text = 'Pending';
+      color = Colors.orange;
+    } else if (course.enrollmentStatus == 'rejected') {
+      text = 'Rejected';
+      color = Colors.red;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
       ),
     );
   }
 }
 
-// Minimal form widget for the modal
 class NewCourseForm extends StatefulWidget {
   const NewCourseForm({super.key});
 
@@ -334,38 +291,9 @@ class NewCourseForm extends StatefulWidget {
 }
 
 class _NewCourseFormState extends State<NewCourseForm> {
-  final _nameController = TextEditingController();
-  final _profController = TextEditingController();
+  final _titleController = TextEditingController();
+  final _descController = TextEditingController();
   DateTime? _selectedDate;
-
-  void _submitData() {
-    if (_nameController.text.isEmpty || _selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a name and select a date.')),
-      );
-      return; 
-    }
-    
-    context.read<CoursesProvider>().addCourse(
-      _nameController.text,
-      _profController.text,
-      _selectedDate!,
-    );
-    
-    Navigator.of(context).pop();
-  }
-
-  void _presentDatePicker() {
-    showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2030),
-    ).then((pickedDate) {
-      if (pickedDate == null) return;
-      setState(() => _selectedDate = pickedDate);
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -373,51 +301,39 @@ class _NewCourseFormState extends State<NewCourseForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Add Course',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
+        const Text('Add New Course', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
         const SizedBox(height: 16),
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Course Name',
-            border: OutlineInputBorder(),
-          ),
-        ),
+        TextField(controller: _titleController, decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder())),
         const SizedBox(height: 12),
-        TextField(
-          controller: _profController,
-          decoration: const InputDecoration(
-            labelText: 'Professor',
-            border: OutlineInputBorder(),
-          ),
-        ),
+        TextField(controller: _descController, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
         const SizedBox(height: 16),
         ListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            _selectedDate == null
-                ? 'No Exam Date Chosen!'
-                : 'Exam Date: ${DateFormat.yMMMd().format(_selectedDate!)}',
-          ),
+          title: Text(_selectedDate == null ? 'No Date Chosen' : DateFormat.yMMMd().format(_selectedDate!)),
           trailing: TextButton(
-            onPressed: _presentDatePicker,
-            child: const Text('CHOOSE DATE', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: context, 
+                initialDate: DateTime.now(), 
+                firstDate: DateTime.now(), 
+                lastDate: DateTime(2030)
+              );
+              if (picked != null) setState(() => _selectedDate = picked);
+            },
+            child: const Text('PICK DATE'),
           ),
         ),
-        const SizedBox(height: 16),
         ElevatedButton(
-          onPressed: _submitData,
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.all(16),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          ),
-          child: const Text('SAVE COURSE'),
-        ),
-        const SizedBox(height: 24),
+          onPressed: () {
+            if (_titleController.text.isEmpty || _selectedDate == null) return;
+            context.read<CoursesProvider>().addCourse(
+              _titleController.text,
+              _descController.text,
+              _selectedDate!
+            );
+            Navigator.pop(context);
+          },
+          child: const Text('CREATE'),
+        )
       ],
     );
   }

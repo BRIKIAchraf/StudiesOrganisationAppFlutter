@@ -25,10 +25,12 @@ dependencies:
   flutter_markdown: ^0.6.18+2
   flutter_local_notifications: ^17.1.0
   timezone: ^0.9.2
-  # Biometric authentication
-  local_auth: ^2.1.8
+  # Biometric authentication removed
+  # local_auth: ^2.1.8
   # WebSocket
   socket_io_client: ^2.0.3+1
+  # pdfx: ^2.9.2
+  file_picker: ^6.1.1
 
 dev_dependencies:
   flutter_test:

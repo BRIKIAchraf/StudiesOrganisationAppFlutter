@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/biometric_service.dart';
+
 import '../theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,27 +13,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _biometricAvailable = false;
-  bool _biometricEnabled = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkBiometric();
-  }
-
-  Future<void> _checkBiometric() async {
-    final biometricService = BiometricService();
-    final available = await biometricService.isBiometricAvailable();
-    final enabled = await biometricService.isBiometricLoginEnabled();
-    
-    if (mounted) {
-      setState(() {
-        _biometricAvailable = available;
-        _biometricEnabled = enabled;
-      });
-    }
-  }
 
   void _showEditProfile(BuildContext context, SettingsProvider settings) {
     final nameController = TextEditingController(text: settings.userName);
@@ -123,44 +103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Divider(),
         
         // Biometric Settings - NEW
-        if (_biometricAvailable) ...[
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text('Security', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-          ),
-          SwitchListTile(
-            secondary: const Icon(Icons.fingerprint),
-            title: const Text('Biometric Login'),
-            subtitle: Text(_biometricEnabled 
-              ? 'Login with fingerprint or face ID' 
-              : 'Enable fast login with biometrics'),
-            value: _biometricEnabled,
-            onChanged: (value) async {
-              if (value) {
-                // Show dialog to confirm and store credentials
-                final confirmed = await _showEnableBiometricDialog(context);
-                if (confirmed) {
-                  await auth.setupBiometric('', ''); // Credentials already stored from login
-                  setState(() => _biometricEnabled = true);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Biometric login enabled')),
-                    );
-                  }
-                }
-              } else {
-                await auth.disableBiometric();
-                setState(() => _biometricEnabled = false);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Biometric login disabled')),
-                  );
-                }
-              }
-            },
-          ),
-          const Divider(),
-        ],
         
         const Padding(
           padding: EdgeInsets.all(16.0),
@@ -254,32 +196,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<bool> _showEnableBiometricDialog(BuildContext context) async {
-    return await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.fingerprint, color: AppColors.primary),
-            SizedBox(width: 12),
-            Text('Enable Biometric Login'),
-          ],
-        ),
-        content: const Text(
-          'This will allow you to login using your fingerprint or face ID on this device.\n\nYour credentials will be securely stored for authentication.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Enable'),
-          ),
-        ],
-      ),
-    ) ?? false;
-  }
 }

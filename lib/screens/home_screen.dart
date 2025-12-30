@@ -88,7 +88,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 20),
-            ] else ...[
+            ],
+            // Student-only study metrics
+            if (auth.userRole == 'student' || auth.userRole == null) ...[
               // Student Study Today Highlight Card
               Card(
                 elevation: 0,
@@ -117,27 +119,38 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-            ],
 
-
-            // Smart Recommendation Card
-            if (rec != null) ...[
-              const Text('Smart Recommendation', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Card(
-                elevation: 0,
-                color: Colors.amber.withOpacity(0.1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: Colors.amber.withOpacity(0.3))),
-                child: ListTile(
-                  leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.bolt_rounded, color: Colors.white)),
-                  title: Text('Study ${rec.name} Next', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Priority: High (Nearest exam or low efforts)'),
-                  trailing: ElevatedButton(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyTimerScreen(course: rec))),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.white, elevation: 0),
-                    child: const Text('START'),
+              // Smart Recommendation Card
+              if (rec != null) ...[
+                const Text('Smart Recommendation', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Card(
+                  elevation: 0,
+                  color: Colors.amber.withOpacity(0.1),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15), side: BorderSide(color: Colors.amber.withOpacity(0.3))),
+                  child: ListTile(
+                    leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.bolt_rounded, color: Colors.white)),
+                    title: Text('Study ${rec.title} Next', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: const Text('Priority: High (Nearest exam or low efforts)'),
+                    trailing: ElevatedButton(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StudyTimerScreen(course: rec))),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.white, elevation: 0),
+                      child: const Text('START'),
+                    ),
                   ),
                 ),
+                const SizedBox(height: 24),
+              ],
+            ],
+            if (auth.userRole == 'professor') ...[
+              // Professor Management Shortcuts
+              const Text('Active Management', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                   _buildStatCard(context, 'Exam Requests', '12 pending', Icons.assignment_late_rounded, Colors.orange),
+                   _buildStatCard(context, 'Resource Views', '450 today', Icons.visibility_rounded, Colors.blue),
+                ],
               ),
               const SizedBox(height: 24),
             ],
@@ -303,8 +316,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Card(
                     child: ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      title: Text(nextExam.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Prof. ${nextExam.professor}'),
+                      title: Text(nextExam.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Prof. ${nextExam.professorName}'),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.end,

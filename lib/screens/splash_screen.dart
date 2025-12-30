@@ -18,22 +18,22 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     super.initState();
     
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 2500),
       vsync: this,
     );
     
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.9, end: 2.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
     );
     
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 2.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeIn),
     );
     
     _controller.forward();
     
     // Navigate after splash animation
-    Future.delayed(const Duration(seconds: 3), () {
+    Future.delayed(const Duration(seconds: 5), () {
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/auth');
       }

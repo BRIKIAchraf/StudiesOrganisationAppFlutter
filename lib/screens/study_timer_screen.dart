@@ -127,7 +127,7 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Text(widget.course.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text(widget.course.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             
             // Mode Toggle

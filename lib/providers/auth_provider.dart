@@ -2,61 +2,47 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io' show Platform;
-
+import '../models/user.dart';
 import '../config/api_config.dart';
 import '../services/notification_service.dart';
-import '../services/biometric_service.dart';
+
 
 class AuthProvider extends ChangeNotifier {
   String? _token;
-  String? _userId;
-  String? _userName;
-  String? _userRole;
-  String? _professorId;
-  int _points = 0;
-  int _streak = 0;
-  bool _biometricEnabled = false;
+  User? _user;
 
   String? get token => _token;
-  String? get userId => _userId;
-  String? get userName => _userName;
-  String? get userRole => _userRole;
-  String? get professorId => _professorId;
-  int get points => _points;
-  int get streak => _streak;
   bool get isAuthenticated => _token != null;
-  bool get isAdmin => _userRole == 'admin';
-  bool get biometricEnabled => _biometricEnabled;
+  User? get user => _user;
+  
+  // Helpers for legacy access compatibility
+  String? get userId => _user?.id;
+  String? get userName => _user?.name;
+  String? get userRole => _user?.role;
+  String? get professorId => _user?.professorId;
+  int get points => _user?.points ?? 0;
+  int get streak => _user?.streak ?? 0;
+  bool get isAdmin => _user?.role == 'admin'; // Removed admin role but kept gettersafe
 
   final String _authUrl = ApiConfig.authUrl;
-  final BiometricService _biometricService = BiometricService();
-
-  // Check if biometric login is available
-  Future<bool> canUseBiometric() async {
-    final isAvailable = await _biometricService.isBiometricAvailable();
-    final isEnabled = await _biometricService.isBiometricLoginEnabled();
-    return isAvailable && isEnabled;
-  }
 
   Future<void> tryAutoLogin() async {
     final prefs = await SharedPreferences.getInstance();
-    _biometricEnabled = await _biometricService.isBiometricLoginEnabled();
     
     if (!prefs.containsKey('userData')) return;
 
-    final userData = json.decode(prefs.getString('userData')!) as Map<String, dynamic>;
-    _token = userData['token'];
-    _userId = userData['userId'];
-    _userName = userData['name'];
-    _userRole = userData['role'];
-    _professorId = userData['professorId'];
-    _points = userData['points'] ?? 0;
-    _streak = userData['streak'] ?? 0;
-    notifyListeners();
+    try {
+      final userData = json.decode(prefs.getString('userData')!) as Map<String, dynamic>;
+      _token = userData['token'];
+      // Reconstitute User object from stored data
+      _user = User.fromJson(userData['user']);
+      notifyListeners();
+    } catch (e) {
+      print('Auto login parse error: $e');
+    }
   }
 
-  Future<void> login(String email, String password, {bool enableBiometric = false}) async {
+  Future<void> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$_authUrl/login'),
@@ -70,40 +56,15 @@ class AuthProvider extends ChangeNotifier {
       }
 
       _token = responseData['token'];
-      _userId = responseData['user']['id'];
-      _userName = responseData['user']['name'];
-      _userRole = responseData['user']['role'];
-      _professorId = responseData['user']['professorId'];
-      _points = responseData['user']['points'] ?? 0;
-      _streak = responseData['user']['streak'] ?? 0;
+      _user = User.fromJson(responseData['user']);
 
       final prefs = await SharedPreferences.getInstance();
       final userData = json.encode({
         'token': _token,
-        'userId': _userId,
-        'name': _userName,
-        'role': _userRole,
-        'professorId': _professorId,
-        'points': _points,
-        'streak': _streak,
+        'user': _user!.toJson(),
       });
       await prefs.setString('userData', userData);
       
-      // Enable biometric if requested
-      if (enableBiometric) {
-        await _biometricService.storeCredentials(email, password);
-        await _biometricService.enableBiometricLogin(email);
-        _biometricEnabled = true;
-      }
-      
-      // Trigger welcome notification and schedule daily reminders
-      try {
-        final notificationService = NotificationService();
-        await notificationService.showWelcomeNotification(_userName!);
-        await notificationService.scheduleDailyReminder();
-      } catch (e) {
-        print('Notification error: $e');
-      }
       
       notifyListeners();
     } catch (error) {
@@ -111,48 +72,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  // Biometric login - authenticate using stored credentials
-  Future<bool> biometricLogin() async {
-    try {
-      final canUse = await canUseBiometric();
-      if (!canUse) return false;
-
-      final authenticated = await _biometricService.authenticate(
-        reason: 'Authenticate to login to Study Planner',
-      );
-
-      if (authenticated) {
-        final email = await _biometricService.getBiometricUserEmail();
-        final password = await _biometricService.getStoredPassword();
-
-        if (email != null && password != null) {
-          await login(email, password);
-          return true;
-        }
-      }
-      return false;
-    } catch (e) {
-      print('Biometric login error: $e');
-      return false;
-    }
-  }
-
-  // Enable biometric login for current user
-  Future<void> setupBiometric(String email, String password) async {
-    await _biometricService.storeCredentials(email, password);
-    await _biometricService.enableBiometricLogin(email);
-    _biometricEnabled = true;
-    notifyListeners();
-  }
-
-  // Disable biometric login
-  Future<void> disableBiometric() async {
-    await _biometricService.disableBiometricLogin();
-    _biometricEnabled = false;
-    notifyListeners();
-  }
-
-  Future<void> register(String name, String email, String password, {String role = 'student', String? professorId}) async {
+  Future<void> register(String name, String email, String password, {required String role, String? professorId}) async {
     try {
       final response = await http.post(
         Uri.parse('$_authUrl/register'),
@@ -162,7 +82,7 @@ class AuthProvider extends ChangeNotifier {
           'email': email,
           'password': password,
           'role': role,
-          if (professorId != null) 'professorId': professorId,
+          'professorId': professorId,
         }),
       );
 
@@ -170,46 +90,45 @@ class AuthProvider extends ChangeNotifier {
         final responseData = json.decode(response.body);
         throw responseData['error'] ?? 'Registration failed';
       }
+      
+      // Auto login after register
+      await login(email, password);
     } catch (error) {
       rethrow;
     }
   }
 
-  Future<void> switchRole(String newRole) async {
-    if (_token == null) return;
-    try {
-      final response = await http.put(
-        Uri.parse('$_authUrl/role'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: json.encode({'role': newRole}),
-      );
+  // Biometrics wrapper
 
-      if (response.statusCode == 200) {
-        _userRole = newRole;
-        final prefs = await SharedPreferences.getInstance();
-        final userData = json.decode(prefs.getString('userData')!);
-        userData['role'] = _userRole;
-        await prefs.setString('userData', json.encode(userData));
-        notifyListeners();
-      } else {
-        throw 'Failed to update role';
-      }
-    } catch (error) {
-      rethrow;
+  Future<void> switchRole(String newRole) async {
+    if (_user != null) {
+      // Create new user object with updated role for local state
+      // In real app, this might need backend validation or re-login
+      _user = User(
+        id: _user!.id,
+        name: _user!.name,
+        email: _user!.email,
+        role: newRole,
+        professorId: _user!.professorId,
+        points: _user!.points,
+        streak: _user!.streak,
+      );
+      
+      // Update prefs
+      final prefs = await SharedPreferences.getInstance();
+      final userData = json.decode(prefs.getString('userData') ?? '{}');
+      userData['user'] = _user!.toJson();
+      await prefs.setString('userData', json.encode(userData));
+      
+      notifyListeners();
     }
   }
 
   Future<void> logout() async {
     _token = null;
-    _userId = null;
-    _userName = null;
-    _userRole = null;
+    _user = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('userData');
     notifyListeners();
   }
 }
-

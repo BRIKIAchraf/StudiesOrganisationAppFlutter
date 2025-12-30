@@ -25,7 +25,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
       for (var session in course.sessions) {
         allSessions.add({
           'courseId': course.id,
-          'courseName': course.name,
+          'courseName': course.title,
           'session': session,
         });
       }
@@ -55,7 +55,7 @@ class _StudySessionsScreenState extends State<StudySessionsScreen> {
               ...coursesProvider.courses.map((c) => Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: FilterChip(
-                  label: Text(c.name),
+                  label: Text(c.title),
                   selected: _selectedCourseId == c.id,
                   onSelected: (selected) => setState(() => _selectedCourseId = selected ? c.id : null),
                   selectedColor: Colors.indigo.withOpacity(0.2),

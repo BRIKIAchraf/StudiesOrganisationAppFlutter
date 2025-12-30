@@ -6,7 +6,7 @@ class ApiConfig {
   // 2. Find your IPv4 Address (e.g., 192.168.1.XX)
   // 3. Replace '10.0.2.2' with your IP below if running on a real phone
   // For USB debugging with `adb reverse tcp:3000 tcp:3000`, use 127.0.0.1
-  static const String _pcIpAddress = '127.0.0.1'; 
+  static const String _pcIpAddress = '10.0.2.2'; 
   
   static String get baseUrl {
     if (Platform.isAndroid) {

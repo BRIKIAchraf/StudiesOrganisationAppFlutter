@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../services/biometric_service.dart';
+
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -20,49 +20,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
   bool _isLoading = false;
   String _selectedRole = 'student';
-  bool _enableBiometric = false;
-  bool _biometricAvailable = false;
-  bool _canUseBiometricLogin = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkBiometric();
-  }
 
-  Future<void> _checkBiometric() async {
-    final biometricService = BiometricService();
-    final available = await biometricService.isBiometricAvailable();
-    final canUse = await context.read<AuthProvider>().canUseBiometric();
-    if (mounted) {
-      setState(() {
-        _biometricAvailable = available;
-        _canUseBiometricLogin = canUse;
-      });
-    }
-  }
 
-  Future<void> _biometricLogin() async {
-    setState(() => _isLoading = true);
-    final auth = context.read<AuthProvider>();
-    
-    try {
-      final success = await auth.biometricLogin();
-      if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Biometric authentication failed')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
 
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -75,7 +35,6 @@ class _LoginScreenState extends State<LoginScreen> {
         await auth.login(
           _emailController.text,
           _passwordController.text,
-          enableBiometric: _enableBiometric,
         );
       } else {
         await auth.register(
@@ -181,32 +140,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 28),
                           
                           // Biometric Login Button (only show on login with saved credentials)
-                          if (_isLogin && _canUseBiometricLogin) ...[
-                            OutlinedButton.icon(
-                              onPressed: _isLoading ? null : _biometricLogin,
-                              icon: const Icon(Icons.fingerprint, size: 28),
-                              label: const Text('Login with Biometrics'),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(double.infinity, 56),
-                                side: BorderSide(color: AppColors.primary, width: 2),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(child: Divider(color: Colors.grey[300])),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  child: Text('OR', style: TextStyle(color: Colors.grey[500])),
-                                ),
-                                Expanded(child: Divider(color: Colors.grey[300])),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                          ],
                           
                           if (!_isLogin) ...[
                             TextFormField(
@@ -292,18 +225,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           
                           // Enable biometric option on login
-                          if (_isLogin && _biometricAvailable && !_canUseBiometricLogin) ...[
-                            const SizedBox(height: 12),
-                            CheckboxListTile(
-                              value: _enableBiometric,
-                              onChanged: (val) => setState(() => _enableBiometric = val!),
-                              title: const Text('Enable biometric login'),
-                              subtitle: const Text('Use fingerprint or face for future logins'),
-                              controlAffinity: ListTileControlAffinity.leading,
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                            ),
-                          ],
                           
                           const SizedBox(height: 28),
                           if (_isLoading)
@@ -336,7 +257,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           TextButton(
                             onPressed: () => setState(() {
                               _isLogin = !_isLogin;
-                              _enableBiometric = false;
                             }),
                             child: Text(
                               _isLogin 
