@@ -107,7 +107,16 @@ app.post('/api/auth/register', async (req, res) => {
 
         const sql = 'INSERT INTO users (id, name, email, password, role, professorId) VALUES (?, ?, ?, ?, ?, ?)';
         db.run(sql, [id, name, email, hashedPassword, role || 'student', professorId || null], (err) => {
-            if (err) return res.status(400).json({ error: 'Email already exists' });
+            if (err) {
+                console.error("Registration Error:", err.message);
+                if (err.message.includes('UNIQUE constraint failed: users.email')) {
+                    return res.status(400).json({ error: 'Email already exists' });
+                }
+                if (err.message.includes('UNIQUE constraint failed: users.professorId')) {
+                    return res.status(400).json({ error: 'Professor ID already exists' });
+                }
+                return res.status(400).json({ error: err.message });
+            }
             res.status(201).json({ message: 'User registered' });
         });
     } catch (e) {
