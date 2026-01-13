@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.study_planner"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "25.1.8937393"
 
     compileOptions {
@@ -26,7 +26,7 @@ android {
         applicationId = "com.example.study_planner"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 21
+        minSdkVersion = flutter.minSdkVersion
         targetSdk = 35
         multiDexEnabled true
         versionCode = flutter.versionCode

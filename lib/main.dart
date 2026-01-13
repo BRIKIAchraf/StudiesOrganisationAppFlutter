@@ -12,13 +12,25 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService().init();
+  try {
+    await NotificationService().init();
+  } catch (e) {
+    debugPrint('Error initializing NotificationService: $e');
+  }
   
   final settingsProvider = SettingsProvider();
-  await settingsProvider.loadSettings();
+  try {
+    await settingsProvider.loadSettings();
+  } catch (e) {
+    debugPrint('Error loading settings: $e');
+  }
   
   final authProvider = AuthProvider();
-  await authProvider.tryAutoLogin();
+  try {
+    await authProvider.tryAutoLogin();
+  } catch (e) {
+    debugPrint('Error trying auto login: $e');
+  }
   
   runApp(
     MultiProvider(

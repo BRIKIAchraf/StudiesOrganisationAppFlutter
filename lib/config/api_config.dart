@@ -1,20 +1,24 @@
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 
 class ApiConfig {
-  // --- CONFIGURATION FOR PHYSICAL DEVICE ---
-  // 1. Run 'ipconfig' on your computer
-  // 2. Find your IPv4 Address (e.g., 192.168.1.XX)
-  // 3. Replace '10.0.2.2' with your IP below if running on a real phone
-  // For USB debugging with `adb reverse tcp:3000 tcp:3000`, use 127.0.0.1
-  static const String _pcIpAddress = '127.0.0.1'; 
-  
+  // --- CONFIGURATION FOR DEVELOPMENT ---
+  // Android Emulator → 10.0.2.2
+  // Physical device → your PC IPv4 (e.g. 192.168.1.20)
+  // iOS simulator / desktop → localhost
+
+  static const String _androidEmulatorHost = '10.0.2.2';// change if needed
+  static const String _desktopHost = 'localhost';
+
   static String get baseUrl {
-    if (Platform.isAndroid) {
-      // 10.0.2.2 is the special alias to your host loopback interface (127.0.0.1 on your development machine)
-      return 'http://$_pcIpAddress:3000/api';
-    } else {
-      return 'http://localhost:3000/api';
+    if (kIsWeb) {
+      return 'http://$_desktopHost:3000/api';
     }
+    // For mobile (Android/iOS)
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://$_androidEmulatorHost:3000/api';
+    }
+    // Fallback for iOS/Desktop
+    return 'http://$_desktopHost:3000/api';
   }
 
   static String get authUrl => '$baseUrl/auth';

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,7 @@ class BiometricService {
 
   // Check if device supports biometrics
   Future<bool> isBiometricAvailable() async {
+    if (kIsWeb) return false;
     try {
       final isAvailable = await _localAuth.canCheckBiometrics;
       final isDeviceSupported = await _localAuth.isDeviceSupported();
@@ -22,6 +24,7 @@ class BiometricService {
 
   // Get available biometric types
   Future<List<BiometricType>> getAvailableBiometrics() async {
+    if (kIsWeb) return [];
     try {
       return await _localAuth.getAvailableBiometrics();
     } on PlatformException {
@@ -31,12 +34,14 @@ class BiometricService {
 
   // Check if face ID is available
   Future<bool> hasFaceId() async {
+    if (kIsWeb) return false;
     final biometrics = await getAvailableBiometrics();
     return biometrics.contains(BiometricType.face);
   }
 
   // Check if fingerprint is available
   Future<bool> hasFingerprint() async {
+    if (kIsWeb) return false;
     final biometrics = await getAvailableBiometrics();
     return biometrics.contains(BiometricType.fingerprint) || 
            biometrics.contains(BiometricType.strong);
@@ -44,6 +49,7 @@ class BiometricService {
 
   // Authenticate with biometrics
   Future<bool> authenticate({String reason = 'Please authenticate to login'}) async {
+    if (kIsWeb) return false;
     try {
       final isAvailable = await isBiometricAvailable();
       if (!isAvailable) return false;

@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -9,18 +10,31 @@ class NotificationService {
   NotificationService._internal();
 
   final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  
+  // Public getter to allow other classes to access the plugin if needed (e.g. ChatProvider)
+  // Though cleaner architecture would move the logic here.
+  FlutterLocalNotificationsPlugin get plugin => _notificationsPlugin;
 
   Future<void> init() async {
-    const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
+    try {
+      if (kIsWeb) {
+        // Skip local notifications init for web for now to prevent startup crashes
+        // or unexpected behavior if not fully configured.
+        return;
+      }
+      const AndroidInitializationSettings androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const DarwinInitializationSettings iosSettings = DarwinInitializationSettings();
 
-    const InitializationSettings initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const InitializationSettings initSettings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    await _notificationsPlugin.initialize(initSettings);
-    tz.initializeTimeZones();
+      await _notificationsPlugin.initialize(initSettings);
+      tz.initializeTimeZones();
+    } catch (e) {
+      debugPrint('NotificationService init error: $e');
+    }
   }
 
   // Welcome notification on login
@@ -215,6 +229,25 @@ class NotificationService {
           'Instant Alerts',
           importance: Importance.max,
           priority: Priority.high,
+        ),
+      ),
+    );
+  }
+  
+  // Chat notification
+  Future<void> showChatNotification(String userName, String message, int id) async {
+    await _notificationsPlugin.show(
+      id,
+      'New message from $userName',
+      message,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'chat_channel',
+          'Chat Messages',
+          channelDescription: 'Notifications for new chat messages',
+          importance: Importance.max,
+          priority: Priority.high,
+          category: AndroidNotificationCategory.message,
         ),
       ),
     );

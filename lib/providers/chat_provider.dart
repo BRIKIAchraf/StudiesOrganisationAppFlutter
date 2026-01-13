@@ -7,7 +7,7 @@ import '../config/api_config.dart';
 import '../models/message.dart';
 import '../providers/auth_provider.dart';
 
-class ChatProvider with ChangeNotifier {
+class ChatProvider extends ChangeNotifier {
   IO.Socket? _socket;
   List<Message> _messages = [];
   bool _isLoading = false;
@@ -20,10 +20,34 @@ class ChatProvider with ChangeNotifier {
   Map<String, bool> get typingUsers => _typingUsers;
   
   String? _currentUserId;
+  String? _token;
+
+  // Need to initialize notifications
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  
+  ChatProvider() {
+    _initNotifications();
+  }
+  
+  Future<void> _initNotifications() async {
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+    await _notificationsPlugin.initialize(initSettings);
+  }
 
   void initSocket(String token, String userId) {
+    // If user changed or we are reconnecting with different credentials
+    if (_currentUserId != null && _currentUserId != userId) {
+       disconnectSocket();
+    }
+    
     _currentUserId = userId;
-    if (_socket != null && _socket!.connected) return;
+    _token = token;
+    
+    if (_socket != null) {
+        if (!_socket!.connected) _socket!.connect();
+        return;
+    }
 
     // Use pure IP for socket to avoid issues, or reuse baseUrl logic
     // Removing /api from baseUrl for socket connection
@@ -32,6 +56,7 @@ class ChatProvider with ChangeNotifier {
     _socket = IO.io(socketUrl, IO.OptionBuilder()
         .setTransports(['websocket'])
         .enableAutoConnect()
+        .setExtraHeaders({'Authorization': 'Bearer $token'}) // Pass token in handshake if supported by backend, or just relies on later events
         .build());
 
     _socket!.onConnect((_) {
@@ -49,19 +74,6 @@ class ChatProvider with ChangeNotifier {
     _socket!.on('receive_message', (data) {
       final message = Message.fromJson(data);
       _messages.add(message);
-      
-      // Simple check: if I am not the sender, show notification
-      // Note: We don't have current userId stored easily here without passing it.
-      // But we can assume if we received it and we are sticking to the socket, we might be background or foreground.
-      // Ideally check if app is in background, but simple trigger is requested.
-      // Use a heuristic or just show it (user will see banner).
-      // Filter out own messages by checking if we "sent" it? Socket sends back to sender too.
-      // We need to know "my" userId.
-      // Let's postpone notification if we can't filter.
-      // Actually, we can check against typingUsers/auth if we had access. 
-      // For now, let's just notify. (User will see "New message from Me" if we don't filter, which is annoying).
-      // Correction: We don't have auth here. 
-      // Let's add 'currentUserId' to ChatProvider and set it on initSocket.
       
       if (_currentUserId != null && message.userId != _currentUserId) {
         _showNotification(message);
@@ -103,17 +115,32 @@ class ChatProvider with ChangeNotifier {
       notifyListeners();
     });
   }
+  
+  void disconnectSocket() {
+    if (_socket != null) {
+      _socket!.disconnect();
+      _socket!.dispose();
+      _socket = null;
+    }
+    _isConnected = false;
+    _typingUsers.clear();
+    // Note: We don't clear messages here necessarily, as user might want to see them cached.
+    // But if switching users, clear is better. 
+    // For now, let's keep them until reload.
+    notifyListeners();
+  }
 
   void joinRoom(String courseId) {
     if (_socket != null) {
       _socket!.emit('join_room', courseId);
+      // Fetch history via API
       fetchMessages(courseId);
     }
   }
 
   void leaveRoom(String courseId) {
     if (_socket != null) {
-      // _socket!.emit('leave_room', courseId); // If implemented on server
+      // _socket!.emit('leave_room', courseId);
       _messages = [];
       _typingUsers.clear();
       notifyListeners();
@@ -121,18 +148,10 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> fetchMessages(String courseId) async {
-    _isLoading = true;
-    notifyListeners();
-    
-    // We need auth token here. Handled by passing context or token to provider methods
-    // But better to store token in provider or passed in init.
-    // Ideally, AuthProvider should be accessible.
-    // For now, assume global auth or passed in. 
-    // Wait... we don't have the token stored in this provider.
-    // We should pass it in methods.
+    if (_token == null) return;
+    await loadMessages(courseId, _token!);
   }
   
-  // Adjusted fetch to accept token
   Future<void> loadMessages(String courseId, String token) async {
     _isLoading = true;
     notifyListeners();
@@ -153,19 +172,6 @@ class ChatProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  // Need to initialize notifications
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
-  
-  ChatProvider() {
-    _initNotifications();
-  }
-  
-  Future<void> _initNotifications() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
-    await _notificationsPlugin.initialize(initSettings);
   }
   
   Future<void> _showNotification(Message msg) async {
