@@ -21,10 +21,13 @@ const db = new sqlite3.Database(dbPath, (err) => {
         lastStudyDate TEXT
       )`, (err) => {
                 if (!err) {
-                    db.run('ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0', (err) => { });
-                    db.run('ALTER TABLE users ADD COLUMN streak INTEGER DEFAULT 0', (err) => { });
-                    db.run('ALTER TABLE users ADD COLUMN lastStudyDate TEXT', (err) => { });
-                    db.run('ALTER TABLE users ADD COLUMN professorId TEXT UNIQUE', (err) => { });
+                    db.run('ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0', (err) => { if (err) console.log('Migration(points):', err.message); });
+                    db.run('ALTER TABLE users ADD COLUMN streak INTEGER DEFAULT 0', (err) => { if (err) console.log('Migration(streak):', err.message); });
+                    db.run('ALTER TABLE users ADD COLUMN lastStudyDate TEXT', (err) => { if (err) console.log('Migration(lastStudyDate):', err.message); });
+                    // SQLite ALTER TABLE cannot add a UNIQUE column directly. 
+                    // We add it without UNIQUE constraint here for migration compatibility.
+                    // The CREATE TABLE above handles new databases correctly with UNIQUE.
+                    db.run('ALTER TABLE users ADD COLUMN professorId TEXT', (err) => { if (err) console.log('Migration(professorId):', err.message); });
                 }
             });
 
