@@ -1,7 +1,8 @@
-# University Study Planner
-**Student:** [Name Surname]  
-**Matricola:** [123456]  
-**Course:** Mobile Computing 2024/2025
+# University urbino carlo bo
+**Student:** Naim bouzommita 
+**Matricola:** 345783
+**Course:** Mobile and ui programming
+2025/2026
 
 ## Project Description
 This application is a study planner designed to help university students manage their courses, track upcoming exams, and log their study sessions. I built this app because I often forget how much time I spend studying for each subject, and I wanted a simple tool to visualize my progress.
@@ -30,4 +31,5 @@ To manage this project like a professional developer, please refer to the follow
 - **Academic Gamification**: Points, daily streaks, and achievement badges.
 - **Premium UI**: Adaptive split-pane view for tablets and glassmorphism design.
 - **Markdown Notes**: Rich-text notes for every course.
+
 
