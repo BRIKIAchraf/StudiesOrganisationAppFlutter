@@ -9,9 +9,17 @@ import 'screens/main_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
+import 'services/persistence_service.dart';
+
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
+import 'providers/study_groups_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize services
+  await PersistenceService().init();
   await NotificationService().init();
   
   final settingsProvider = SettingsProvider();
@@ -27,6 +35,10 @@ void main() async {
         ChangeNotifierProxyProvider<AuthProvider, CoursesProvider>(
           create: (_) => CoursesProvider(),
           update: (_, auth, courses) => courses!..updateToken(auth.token),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, StudyGroupsProvider>(
+          create: (_) => StudyGroupsProvider(),
+          update: (_, auth, groups) => groups!..updateToken(auth.token),
         ),
         ChangeNotifierProvider.value(value: settingsProvider),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
@@ -47,9 +59,29 @@ class MyApp extends StatelessWidget {
       title: 'Study Planner',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: settings.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+      darkTheme: AppTheme.lightTheme, // No dark mode
+      themeMode: ThemeMode.light,
       initialRoute: '/',
+      locale: Locale(settings.language ?? 'en'),
+      supportedLocales: const [
+        Locale('en'),
+        Locale('fr'),
+        Locale('ar'),
+      ],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(settings.textScaleFactor),
+          ),
+          child: child!,
+        );
+      },
       routes: {
         '/': (ctx) => const SplashScreen(),
         '/auth': (ctx) => const AuthWrapper(),

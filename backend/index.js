@@ -27,39 +27,151 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // --- Socket.IO ---
+// --- Database Initialization & Migration ---
+const initDb = () => {
+    // Users
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        email TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        professorId TEXT,
+        points INTEGER DEFAULT 0,
+        streak INTEGER DEFAULT 0,
+        bio TEXT,
+        university TEXT,
+        department TEXT,
+        year TEXT,
+        profilePictureUrl TEXT
+    )`);
+
+    // Courses
+    db.run(`CREATE TABLE IF NOT EXISTS courses (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        description TEXT,
+        professorId TEXT,
+        examDate TEXT
+    )`);
+
+    // Enrollments
+    db.run(`CREATE TABLE IF NOT EXISTS enrollments (
+        id TEXT PRIMARY KEY,
+        courseId TEXT,
+        studentId TEXT,
+        status TEXT,
+        requestedAt TEXT,
+        grade INTEGER
+    )`);
+
+    // Messages
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        courseId TEXT,
+        senderId TEXT,
+        userName TEXT,
+        userRole TEXT,
+        content TEXT,
+        type TEXT,
+        timestamp TEXT,
+        isPinned INTEGER DEFAULT 0,
+        attachmentUrl TEXT,
+        replyToId TEXT,
+        reactions TEXT
+    )`);
+
+    // Documents
+    db.run(`CREATE TABLE IF NOT EXISTS documents (
+        id TEXT PRIMARY KEY,
+        courseId TEXT,
+        title TEXT,
+        filePath TEXT,
+        uploadedAt TEXT
+    )`);
+
+    // Study Sessions
+    db.run(`CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        courseId TEXT,
+        studentId TEXT,
+        date TEXT,
+        durationMinutes INTEGER,
+        notes TEXT
+    )`);
+
+    // Migrations (Simple check and add)
+    const addColumn = (table, col, type) => {
+        db.run(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`, (err) => {
+            // Ignore error if column exists
+        });
+    };
+
+    addColumn('users', 'bio', 'TEXT');
+    addColumn('users', 'university', 'TEXT');
+    addColumn('users', 'department', 'TEXT');
+    addColumn('users', 'year', 'TEXT');
+    addColumn('users', 'profilePictureUrl', 'TEXT');
+
+    addColumn('messages', 'attachmentUrl', 'TEXT');
+    addColumn('messages', 'replyToId', 'TEXT');
+    addColumn('messages', 'reactions', 'TEXT'); // JSON string
+
+    addColumn('enrollments', 'grade', 'INTEGER');
+};
+
+initDb();
+
+// --- Socket.IO ---
 io.on('connection', (socket) => {
     socket.on('join_room', (courseId) => {
         socket.join(courseId);
     });
 
     socket.on('send_message', (data) => {
-        // data: { courseId, senderId, userName, userRole, content, type }
-        const { courseId, senderId, userName, userRole, content, type } = data;
+        // data: { courseId, senderId, userName, userRole, content, type, attachmentUrl, replyToId }
+        const { courseId, senderId, userName, userRole, content, type, attachmentUrl, replyToId } = data;
         const timestamp = new Date().toISOString();
         const id = Date.now().toString();
 
-        const sql = 'INSERT INTO messages (id, courseId, senderId, userName, userRole, content, type, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-        db.run(sql, [id, courseId, senderId, userName, userRole, content, type || 'text', timestamp], (err) => {
+        const sql = 'INSERT INTO messages (id, courseId, senderId, userName, userRole, content, type, timestamp, attachmentUrl, replyToId, reactions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        db.run(sql, [id, courseId, senderId, userName, userRole, content, type || 'text', timestamp, attachmentUrl, replyToId, '{}'], (err) => {
             if (!err) {
-                io.to(courseId).emit('receive_message', { id, courseId, senderId, userName, userRole, content, type, timestamp, isPinned: 0 });
+                io.to(courseId).emit('receive_message', {
+                    id, courseId, senderId, userName, userRole, content, type, timestamp,
+                    isPinned: 0, attachmentUrl, replyToId, reactions: '{}'
+                });
             }
         });
     });
 
     socket.on('typing', (data) => socket.to(data.courseId).emit('user_typing', data));
+
+    socket.on('react_message', (data) => {
+        const { messageId, courseId, userId, reaction } = data;
+        // We need to update DB then emit.
+        // This is tricky with simple SQLite json, so we'll do a read-modify-write pattern roughly
+        db.get('SELECT reactions FROM messages WHERE id = ?', [messageId], (err, row) => {
+            if (row) {
+                let reactions = {};
+                try { reactions = JSON.parse(row.reactions || '{}'); } catch (e) { }
+
+                // Toggle or Count? Let's do a simple count for now or list of users
+                // Simplified: Just count per emoji
+                reactions[reaction] = (reactions[reaction] || 0) + 1;
+
+                const str = JSON.stringify(reactions);
+                db.run('UPDATE messages SET reactions = ? WHERE id = ?', [str, messageId], () => {
+                    io.to(courseId).emit('message_reaction', { messageId, reactions: str });
+                });
+            }
+        });
+    });
 });
 
 // --- Auth Middleware ---
-const authenticateToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.sendStatus(401);
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.sendStatus(403);
-        req.user = user;
-        next();
-    });
-};
+// --- Auth Middleware ---
+const authenticateToken = require('./middleware/auth');
 
 // --- Auth Routes ---
 app.post('/api/auth/register', async (req, res) => {
@@ -70,12 +182,15 @@ app.post('/api/auth/register', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const id = Date.now().toString();
 
-        // Professor ID check logic (simplified)
-        if (role === 'professor' && !professorId) return res.status(400).json({ error: 'Professor ID required' });
+        // Auto-generate Professor ID if not provided and role is professor
+        let finalProfessorId = professorId;
+        if (role === 'professor' && !professorId) {
+            finalProfessorId = `PROF-${Date.now()}`;
+        }
 
         const sql = 'INSERT INTO users (id, name, email, password, role, professorId) VALUES (?, ?, ?, ?, ?, ?)';
-        db.run(sql, [id, name, email, hashedPassword, role, professorId], (err) => {
-            if (err) return res.status(400).json({ error: 'Email or Professor ID already exists' });
+        db.run(sql, [id, name, email, hashedPassword, role, finalProfessorId], (err) => {
+            if (err) return res.status(400).json({ error: 'Email already exists' });
             res.status(201).json({ message: 'User registered' });
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -90,14 +205,27 @@ app.post('/api/auth/login', async (req, res) => {
         if (!validPassword) return res.status(400).json({ error: 'Invalid password' });
 
         const token = jwt.sign({ id: user.id, role: user.role, name: user.name }, SECRET_KEY);
-        res.json({
-            token, user: {
-                id: user.id, name: user.name, email: user.email, role: user.role,
-                professorId: user.professorId, points: user.points, streak: user.streak
-            }
+        // exclude password
+        const { password: _, ...userWithoutPassword } = user;
+        res.json({ token, user: userWithoutPassword });
+    });
+});
+
+// --- User Profile ---
+app.put('/api/users/profile', authenticateToken, (req, res) => {
+    const { bio, university, department, year, profilePictureUrl } = req.body;
+    const sql = `UPDATE users SET bio = ?, university = ?, department = ?, year = ?, profilePictureUrl = ? WHERE id = ?`;
+
+    db.run(sql, [bio, university, department, year, profilePictureUrl, req.user.id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+
+        // Return updated user
+        db.get('SELECT id, name, email, role, professorId, points, streak, bio, university, department, year, profilePictureUrl FROM users WHERE id = ?', [req.user.id], (err, row) => {
+            res.json(row);
         });
     });
 });
+
 
 // --- Courses Discovery (Student) ---
 app.get('/api/courses/all', authenticateToken, (req, res) => {
@@ -123,7 +251,7 @@ app.get('/api/courses', authenticateToken, (req, res) => {
     } else {
         // Student: Courses I am enrolled in
         const sql = `
-            SELECT c.*, e.status as enrollmentStatus, u.name as professorName
+            SELECT c.*, e.status as enrollmentStatus, u.name as professorName, e.grade
             FROM courses c
             JOIN enrollments e ON c.id = e.courseId
             JOIN users u ON c.professorId = u.id
@@ -131,6 +259,16 @@ app.get('/api/courses', authenticateToken, (req, res) => {
         `;
         db.all(sql, [req.user.id], (err, rows) => res.json(rows));
     }
+});
+
+// --- Leaderboard ---
+app.get('/api/leaderboard', authenticateToken, (req, res) => {
+    // Top 10 users
+    const sql = 'SELECT id, name, points, streak, profilePictureUrl FROM users WHERE role = "student" ORDER BY points DESC LIMIT 10';
+    db.all(sql, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
 });
 
 // --- Create Course (Professor Only) ---
@@ -270,5 +408,17 @@ app.post('/api/courses/:id/sessions', authenticateToken, (req, res) => {
         }
     );
 });
+
+app.get('/api/sessions', authenticateToken, (req, res) => {
+    if (req.user.role !== 'student') return res.status(403).json({ error: 'Students only' });
+    db.all('SELECT * FROM sessions WHERE studentId = ?', [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+// --- Study Groups Routes ---
+const studyGroupsRouter = require('./routes/study-groups');
+app.use('/api/study-groups', studyGroupsRouter);
 
 server.listen(PORT, '0.0.0.0', () => console.log(`UniConnect API running on port ${PORT}`));

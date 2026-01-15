@@ -4,6 +4,8 @@ import 'dart:ui';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../screens/admin_dashboard_screen.dart';
+import '../screens/courses_screen.dart';
+import '../screens/study_sessions_screen.dart';
 
 class PremiumDrawer extends StatelessWidget {
   const PremiumDrawer({super.key});
@@ -13,6 +15,7 @@ class PremiumDrawer extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final settings = context.watch<SettingsProvider>();
     final isDark = settings.isDarkMode;
+    final paddingTop = MediaQuery.of(context).padding.top;
 
     return Drawer(
       backgroundColor: Colors.transparent,
@@ -35,7 +38,7 @@ class PremiumDrawer extends StatelessWidget {
               // Premium Header with User Info
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.only(top: 60, bottom: 20, left: 24, right: 24),
+                padding: EdgeInsets.only(top: paddingTop + 20, bottom: 20, left: 24, right: 24),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -80,7 +83,7 @@ class PremiumDrawer extends StatelessWidget {
                 context,
                 icon: Icons.home_rounded,
                 label: 'Dashboard',
-                onTap: () => Navigator.pop(context),
+                onTap: () => Navigator.pop(context), // Assuming we are already on Home/Dashboard
               ),
               _buildDrawerItem(
                 context,
@@ -88,26 +91,33 @@ class PremiumDrawer extends StatelessWidget {
                 label: auth.userRole == 'professor' ? 'My Teaching' : 'My Courses',
                 onTap: () {
                   Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CoursesScreen()),
+                  );
                 },
               ),
               _buildDrawerItem(
                 context,
                 icon: Icons.timer_rounded,
                 label: auth.userRole == 'professor' ? 'Course Stats' : 'Study History',
-                onTap: () => Navigator.pop(context),
+                onTap: () {
+                  Navigator.pop(context);
+                   Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StudySessionsScreen()),
+                  );
+                },
               ),
-              if (auth.isAdmin || auth.userRole == 'professor')
+              // Removed Admin/Professor Dashboard link for clean professor UI
+              if (auth.isAdmin)
                 _buildDrawerItem(
                   context,
-                  icon: Icons.psychology_rounded,
-                  label: 'Professor Dashboard',
+                  icon: Icons.admin_panel_settings,
+                  label: 'Admin Panel',
                   onTap: () {
-                    Navigator.pop(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
-                    );
+                     Navigator.pop(context);
+                     // Navigation to admin specific if needed, but per request keeping it simple
                   },
-                  color: Colors.amber[700],
+                  color: Colors.red,
                 ),
               
               const Spacer(),

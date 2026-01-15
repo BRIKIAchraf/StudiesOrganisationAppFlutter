@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>Study Planner Presentation</title>
+
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reset.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/theme/dracula.min.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/plugin/highlight/monokai.min.css">
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h1>Study Planner App</h1>
+					<h3>Organizing Your Academic Journey</h3>
+					<p>
+						<small>Built with Flutter &amp; Dart</small>
+					</p>
+				</section>
+
+				<section>
+					<h2>The Problem</h2>
+					<ul>
+						<li class="fragment">Hard to track multiple courses & deadlines</li>
+						<li class="fragment">Lack of insights into study habits</li>
+						<li class="fragment">Disconnected communication channels</li>
+						<li class="fragment">Difficulty measuring productivity</li>
+					</ul>
+				</section>
+
+				<section>
+					<h2>The Solution</h2>
+					<p>An all-in-one <strong>University Study Planner</strong> mobile application.</p>
+                    <br>
+                    <div style="display: flex; justify-content: space-around;">
+                        <div class="fragment fade-up">Reference<br>Material</div>
+                        <div class="fragment fade-up">Study<br>Tracking</div>
+                        <div class="fragment fade-up">Real-time<br>Chat</div>
+                    </div>
+				</section>
+
+				<section>
+					<section>
+						<h2>Key Features: Student Tools</h2>
+						<p>Empowering students to take control.</p>
+					</section>
+					<section>
+						<h3>Course Management</h3>
+						<p>Detailed views for every enrolled course, including professor details, credits, and schedule.</p>
+					</section>
+					<section>
+						<h3>Smart Study Timer</h3>
+						<p>Focus mode with integrated timers to track deep work sessions and history.</p>
+					</section>
+					<section>
+						<h3>Performance Analytics</h3>
+						<p>Visual charts enabling students to prevent burnout and spot trends in their study habits.</p>
+					</section>
+				</section>
+
+				<section>
+					<section>
+						<h2>Key Features: Admin & Collab</h2>
+						<p>Beyond just personal organization.</p>
+					</section>
+					<section>
+						<h3>Real-Time Chat</h3>
+						<p>Integrated <strong>Socket.IO</strong> client for instant communication with professors and peers.</p>
+					</section>
+                    <section>
+						<h3>Admin Dashboard</h3>
+						<p>Powerful tools for academic staff to manage professors, users, and oversee system stats.</p>
+					</section>
+				</section>
+
+				<section>
+					<h2>Tech Stack</h2>
+					<table>
+						<thead>
+							<tr>
+								<th>Component</th>
+								<th>Technology</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td>Framework</td>
+								<td>Flutter (Dart)</td>
+							</tr>
+							<tr>
+								<td>State Mgmt</td>
+								<td>Provider</td>
+							</tr>
+							<tr>
+								<td>Real-time</td>
+								<td>Socket.IO Client</td>
+							</tr>
+							<tr>
+								<td>Charts</td>
+								<td>fl_chart</td>
+							</tr>
+                            <tr>
+								<td>Local Data</td>
+								<td>Shared Preferences</td>
+							</tr>
+						</tbody>
+					</table>
+				</section>
+
+                <section>
+                    <h2>User Experience</h2>
+                    <ul>
+                        <li>✨ Dynamic <strong>Dark & Light</strong> Themes</li>
+                        <li>🌍 <strong>Localization</strong> Support</li>
+                        <li>🔒 Role-based <strong>Security</strong></li>
+                        <li>📱 Responsive Material Design</li>
+                    </ul>
+                </section>
+
+				<section>
+					<h2>Future Roadmap</h2>
+                    <ol>
+                        <li>Cloud Synchronization across devices</li>
+                        <li>AI-driven study plan generation</li>
+                        <li>Gamification & Leaderboards</li>
+                    </ol>
+				</section>
+
+				<section>
+					<h1>Thank You</h1>
+                    <p>Questions?</p>
+				</section>
+			</div>
+		</div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/plugin/notes/notes.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/plugin/markdown/markdown.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/plugin/highlight/highlight.min.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+                controls: true,
+                progress: true,
+                center: true,
+
+				// Learn about plugins: https://revealjs.com/plugins/
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+			});
+		</script>
+	</body>
+</html>

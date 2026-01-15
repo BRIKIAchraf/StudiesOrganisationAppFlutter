@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/auth_provider.dart';
+import 'profile_screen.dart';
 
 import '../theme.dart';
 
@@ -101,6 +102,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (value) => settings.toggleTheme(value),
         ),
         const Divider(),
+        SwitchListTile(
+           secondary: const Icon(Icons.text_fields),
+           title: const Text('Large Text'),
+           subtitle: Text('Scale: ${settings.textScaleFactor.toStringAsFixed(1)}x'),
+           value: settings.textScaleFactor > 1.0,
+           onChanged: (val) => settings.setTextScale(val ? 1.2 : 1.0),
+        ),
+        const Divider(),
         
         // Biometric Settings - NEW
         
@@ -111,9 +120,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ListTile(
           leading: const Icon(Icons.person),
           title: Text(settings.userName),
-          subtitle: Text('Matricola: ${settings.matricola}'),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+               Text(auth.user?.email ?? ''),
+               if (auth.user?.university != null) Text('${auth.user!.university}'),
+            ],
+          ),
           trailing: const Icon(Icons.edit),
-          onTap: () => _showEditProfile(context, settings),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
         ),
         const Divider(),
         const Padding(

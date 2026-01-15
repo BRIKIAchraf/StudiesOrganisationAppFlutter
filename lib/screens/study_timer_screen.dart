@@ -87,6 +87,7 @@ class _StudyTimerScreenState extends State<StudyTimerScreen> {
 
     final session = StudySession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
+      courseId: widget.course.id,
       date: DateTime.now(),
       durationMinutes: minutes,
       notes: _mode == TimerMode.pomodoro ? 'Pomodoro session ($_pomodoroCycles cycles)' : 'Timed session',

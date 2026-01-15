@@ -63,7 +63,11 @@ class ChatProvider with ChangeNotifier {
       // Correction: We don't have auth here. 
       // Let's add 'currentUserId' to ChatProvider and set it on initSocket.
       
+      // Show notification if it's not from me
       if (_currentUserId != null && message.userId != _currentUserId) {
+         // Also check if we are currently viewing this chat?
+         // Optimally we wouldn't notify if the user is on the chat screen.
+         // But for now, simple notification is requested.
         _showNotification(message);
       }
       
@@ -90,6 +94,39 @@ class ChatProvider with ChangeNotifier {
         );
         notifyListeners();
       }
+    });
+
+    _socket!.on('message_reaction', (data) {
+       final messageId = data['messageId'];
+       final reactionsStr = data['reactions'];
+       Map<String, int> reactions = {};
+       
+       try {
+         final decoded = json.decode(reactionsStr);
+         decoded.forEach((k, v) => reactions[k.toString()] = v as int);
+       } catch (e) {
+          // ignore
+       }
+       
+       final index = _messages.indexWhere((m) => m.id == messageId);
+       if (index != -1) {
+         final old = _messages[index];
+         _messages[index] = Message(
+           id: old.id,
+           courseId: old.courseId,
+           userId: old.userId,
+           userName: old.userName,
+           userRole: old.userRole,
+           content: old.content,
+           type: old.type,
+           timestamp: old.timestamp,
+           messagePinned: old.messagePinned,
+           attachmentUrl: old.attachmentUrl,
+           replyToId: old.replyToId,
+           reactions: reactions,
+         );
+         notifyListeners();
+       }
     });
 
     _socket!.on('user_typing', (data) {
@@ -184,7 +221,7 @@ class ChatProvider with ChangeNotifier {
     );
   }
 
-  void sendMessage(String courseId, String content, AuthProvider auth, {String type = 'text'}) {
+  void sendMessage(String courseId, String content, AuthProvider auth, {String type = 'text', String? attachmentUrl, String? replyToId}) {
     if (_socket == null || !_isConnected) return;
     
     // Send via socket
@@ -195,11 +232,23 @@ class ChatProvider with ChangeNotifier {
       'userRole': auth.userRole,
       'content': content,
       'type': type,
+      'attachmentUrl': attachmentUrl,
+      'replyToId': replyToId,
     };
     
     _socket!.emit('send_message', data);
   }
   
+  void sendReaction(String courseId, String messageId, String reaction, String userId) {
+    if (_socket == null) return;
+     _socket!.emit('react_message', {
+       'courseId': courseId,
+       'messageId': messageId,
+       'userId': userId,
+       'reaction': reaction
+     });
+  }
+
   void sendTyping(String courseId, String userId, String userName, bool isTyping) {
     if (_socket == null) return;
     _socket!.emit('typing', {

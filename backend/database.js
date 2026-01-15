@@ -16,7 +16,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 name TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
-                role TEXT CHECK(role IN ('student', 'professor')) NOT NULL DEFAULT 'student',
+                role TEXT CHECK(role IN ('student', 'professor', 'admin')) NOT NULL DEFAULT 'student',
                 professorId TEXT UNIQUE, 
                 points INTEGER DEFAULT 0,
                 streak INTEGER DEFAULT 0,

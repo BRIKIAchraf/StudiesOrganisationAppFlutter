@@ -8,6 +8,7 @@ import '../models/document.dart';
 import '../models/enrollment.dart';
 import '../config/api_config.dart';
 import '../services/notification_service.dart';
+import '../services/persistence_service.dart';
 
 class CoursesProvider with ChangeNotifier {
   List<Course> _myCourses = []; // Enrolled or Created
@@ -43,15 +44,64 @@ class CoursesProvider with ChangeNotifier {
   // --- Load My Courses (Enrolled / Created) ---
   Future<void> loadMyCourses() async {
     if (_authToken == null) return;
+    final prefs = await SharedPreferences.getInstance();
+
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/courses'), headers: _headers);
-      if (response.statusCode == 200) {
-        final List<dynamic> decoded = json.decode(response.body);
-        _myCourses = decoded.map((item) => Course.fromJson(item)).toList();
+      // 1. Fetch Courses
+      final courseResponse = await http.get(Uri.parse('$_baseUrl/courses'), headers: _headers);
+      
+      // 2. Fetch Sessions (if student)
+      List<StudySession> allSessions = [];
+      try {
+           final sessionResponse = await http.get(Uri.parse('$_baseUrl/sessions'), headers: _headers);
+           if (sessionResponse.statusCode == 200) {
+              final List<dynamic> sData = json.decode(sessionResponse.body);
+              allSessions = sData.map((s) => StudySession.fromJson(s)).toList();
+           }
+      } catch (_) {
+        // Ignore session fetch error (e.g. if professor calls this endpoint)
+      }
+
+      if (courseResponse.statusCode == 200) {
+        await prefs.setString('cached_courses', courseResponse.body); // CACHE
+
+        final List<dynamic> decoded = json.decode(courseResponse.body);
+        _myCourses = decoded.map((item) {
+            final c = Course.fromJson(item);
+            final usersSessions = allSessions.where((s) => s.courseId == c.id).toList();
+            return Course(
+               id: c.id,
+               title: c.title,
+               professorId: c.professorId,
+               professorName: c.professorName,
+               examDate: c.examDate,
+               description: c.description,
+               enrollmentStatus: c.enrollmentStatus,
+               grade: c.grade,
+               sessions: usersSessions,
+            );
+        }).toList();
+        
+        // Schedule Notifications for Exams
+        for (var course in _myCourses) {
+           int notifId = course.id.hashCode;
+           if (course.examDate.isAfter(DateTime.now())) {
+             NotificationService().scheduleExamAlert(course.title, course.examDate, notifId);
+           }
+        }
+        
         notifyListeners();
       }
     } catch (error) {
       print('Network error loading my courses: $error');
+      if (prefs.containsKey('cached_courses')) {
+         print('Loading from cache...');
+         final List<dynamic> decoded = json.decode(prefs.getString('cached_courses')!);
+         // Note: Sessions might be empty in offline mode if we don't cache sessions separately. 
+         // For now, minimal implementation.
+         _myCourses = decoded.map((item) => Course.fromJson(item)).toList();
+         notifyListeners();
+      }
     }
   }
 
@@ -179,14 +229,25 @@ class CoursesProvider with ChangeNotifier {
         headers: _headers,
         body: json.encode(session.toJson()),
       );
+      
       // Optimistic update
       final index = _myCourses.indexWhere((c) => c.id == courseId);
       if (index >= 0) {
-         _myCourses[index].sessions.add(session);
-         notifyListeners();
+        _myCourses[index].sessions.add(session);
+        notifyListeners();
+        
+        // SAVE TO CACHE
+        final persistence = PersistenceService();
+        final allSessions = _myCourses
+            .expand((c) => c.sessions.map((s) => s.toJson()))
+            .toList();
+        await persistence.saveStudySessions(allSessions);
+        
+        debugPrint('✅ Session saved to cache');
       }
     } catch (e) {
-      print('Session add error: $e');
+      debugPrint('❌ Session add error: $e');
+      rethrow;
     }
   }
   

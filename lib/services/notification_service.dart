@@ -229,4 +229,12 @@ class NotificationService {
   Future<void> cancelNotification(int id) async {
     await _notificationsPlugin.cancel(id);
   }
+  
+  Future<void> requestPermissions() async {
+    final bool? result = await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+    print('Notification permission granted: $result');
+  }
 }

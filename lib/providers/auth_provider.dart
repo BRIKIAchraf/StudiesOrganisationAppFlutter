@@ -124,6 +124,48 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateProfile({
+    String? bio,
+    String? university,
+    String? department,
+    String? year,
+    String? profilePictureUrl,
+  }) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$_authUrl/users/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode({
+          'bio': bio,
+          'university': university,
+          'department': department,
+          'year': year,
+          'profilePictureUrl': profilePictureUrl,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final userData = json.decode(response.body);
+        _user = User.fromJson(userData);
+        
+        // Update prefs
+        final prefs = await SharedPreferences.getInstance();
+        final stored = json.decode(prefs.getString('userData') ?? '{}');
+        stored['user'] = _user!.toJson();
+        await prefs.setString('userData', json.encode(stored));
+        
+        notifyListeners();
+      } else {
+        throw 'Failed to update profile';
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     _user = null;

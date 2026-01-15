@@ -6,6 +6,8 @@ import '../providers/auth_provider.dart';
 import '../models/course.dart';
 import 'chat_screen.dart';
 import 'study_sessions_screen.dart';
+import 'pdf_viewer_screen.dart';
+import '../services/integrations_service.dart';
 
 class CourseDetailScreen extends StatefulWidget {
   final String courseId;
@@ -174,11 +176,46 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with SingleTick
                 const Text('Description', style: TextStyle(color: Colors.grey)),
                 const SizedBox(height: 4),
                 Text(course.description.isEmpty ? 'No description available.' : course.description),
+                const SizedBox(height: 16),
+                _ExamCountdown(examDate: course.examDate),
+                const SizedBox(height: 16),
+                if (course.grade != null)
+                   Container(
+                     padding: const EdgeInsets.all(12),
+                     decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.green)),
+                     child: Row(
+                       children: [
+                         const Icon(Icons.grade, color: Colors.green),
+                         const SizedBox(width: 8),
+                         Text('Final Grade: ${course.grade}/100', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                       ],
+                     ),
+                   ),
               ],
             ),
           ),
         ),
         if (isStudent) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child:OutlinedButton.icon(
+                  onPressed: () {
+                     // Add to Calendar
+                     IntegrationsService().addToCalendar(
+                       course.title, 
+                       'Exam for ${course.title}', 
+                       course.examDate, 
+                       course.examDate.add(const Duration(hours: 2))
+                     );
+                  },
+                  icon: const Icon(Icons.calendar_today_outlined),
+                  label: const Text('Add Exam to Calendar'),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
              onPressed: () {
@@ -220,8 +257,19 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> with SingleTick
                     title: Text(doc.title),
                     subtitle: Text(DateFormat.Hms().format(doc.uploadedAt)),
                     onTap: () {
-                       ScaffoldMessenger.of(context).showSnackBar(
-                         const SnackBar(content: Text('PDF viewing is currently disabled')),
+                       /* 
+                       // Currently using raw path. If it's "http...", we blocked it in viewer for now.
+                       // Ideally, backend returns a full URL.
+                       */
+                       // Check if it is a local path or url.
+                       // For the simulator, uploads might be local.
+                       Navigator.of(context).push(
+                         MaterialPageRoute(
+                           builder: (_) => PDFViewerScreen(
+                             filePath: doc.filePath, 
+                             title: doc.title
+                           )
+                         )
                        );
                     },
                   );
@@ -330,6 +378,49 @@ class _StudentsListState extends State<_StudentsList> {
           },
         );
       },
+    );
+  }
+}
+
+class _ExamCountdown extends StatelessWidget {
+  final DateTime examDate;
+  const _ExamCountdown({required this.examDate});
+
+  @override
+  Widget build(BuildContext context) {
+    final diff = examDate.difference(DateTime.now());
+    if (diff.isNegative) {
+      return const Card(
+        color: Colors.grey,
+        child: Padding(padding: EdgeInsets.all(16), child: Center(child: Text("Exam Finished", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)))),
+      );
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [Colors.orange.shade400, Colors.deepOrange]),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+           const Icon(Icons.timer, color: Colors.white, size: 40),
+           Column(
+             children: [
+               Text('${diff.inDays}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+               const Text('Days', style: TextStyle(color: Colors.white70)),
+             ],
+           ),
+           Column(
+             children: [
+               Text('${diff.inHours % 24}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+               const Text('Hours', style: TextStyle(color: Colors.white70)),
+             ],
+           ),
+        ],
+      ),
     );
   }
 }
